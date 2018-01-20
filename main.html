@@ -1,0 +1,110 @@
+<html>
+<body style="padding: 0; margin: 0">
+<div style="left:0; top:0; width:1818px; height:1000px; background:url(grid.png);">
+  <canvas id="original" width="909" height="1000" style="position:absolute; left:0; top:0;"></canvas>
+  <canvas id="mask" width="909" height="1000" style="position:absolute; left:0; top:0; opacity: 0.5"></canvas>
+  <canvas id="dst" width="909" height="1000" style="position:absolute; left:909; top:0"></canvas>
+</div>
+<script src="main.js"></script>
+<script type="text/javascript">
+  /* Function magic(data, train, labels) is defined in "magic.js"
+     Don't forget to 'browserify magic.js > main.js'. */
+
+  var mask = document.getElementById("mask");
+  var dst = document.getElementById("dst");
+  var W = 909;
+  var H = 1000;
+  var srcPoints = null;
+
+  function getDataUri(targetUrl, callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+        var reader = new FileReader();
+        reader.onloadend = function () {
+            callback(reader.result);
+        };
+        reader.readAsDataURL(xhr.response);
+    };
+    var proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+    xhr.open('GET', proxyUrl + targetUrl);
+    xhr.responseType = 'blob';
+    xhr.send();
+  };
+
+  getDataUri("https://media.baselineresearch.com/images/53642/53642_full.jpg", function (base64) {
+    var image = new Image();
+    image.onload = function () {
+      var canvas = document.getElementById('original');
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0);
+      var srcColor = ctx.getImageData(0, 0, W, H).data;
+      srcPoints = [];
+      var p = 0;
+      for (var y = 0; y < H; ++y) {
+        for (var x = 0; x < W; ++x) {
+          srcPoints.push([x, y, srcColor[p], srcColor[p + 1], srcColor[p + 2]]);
+          p += 4;
+        }
+      }
+    }
+    image.src = base64;
+  });
+
+  function update() {
+    var ctx = mask.getContext("2d");
+    var maskData = ctx.getImageData(0, 0, W, H).data;
+    var points = [];
+    var labels = [];
+    var p = 0;
+    var c = 0;
+    for (var y = 0; y < H; ++y) {
+      for (var x = 0; x < W; ++x) {
+        if (maskData[p] >= 128) {
+          points.push(srcPoints[c]);
+          labels.push(0);
+        } else if (maskData[p + 1] >= 128) {
+          points.push(srcPoints[c]);
+          labels.push(1);
+        }
+        p += 4;
+        c++;
+      }
+    }
+    var result = magic(srcPoints, points, labels);
+    var dstCtx = dst.getContext("2d");
+    var outData = dstCtx.createImageData(W, H);
+    var out = outData.data;
+    p = 0;
+    var c = 0;
+    for (var y = 0; y < H; ++y) {
+      for (var x = 0; x < W; ++x) {
+        out[p] = srcPoints[c][2];
+        out[p + 1] = srcPoints[c][3];
+        out[p + 2] = srcPoints[c][4];
+        out[p + 3] = result[c] * 255;
+        p += 4;
+        c++;
+      }
+    }
+    dstCtx.putImageData(outData, 0, 0);
+  }
+
+  function draw(e) {
+    var ctx = mask.getContext("2d");
+    ctx.beginPath();
+    ctx.arc(e.clientX, e.clientY, 1, 0, 2 * Math.PI);
+    if (e.shiftKey) {
+      ctx.fillStyle = "rgb(255,0,0)";
+      ctx.fill();
+    } else if (e.altKey) {
+      update();
+    } else {
+      ctx.fillStyle = "rgb(0,255,0)";
+      ctx.fill();
+    }
+  }
+
+  mask.addEventListener("mousedown", draw);
+</script>
+</body>
+</html>
