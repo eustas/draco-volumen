@@ -1,9 +1,11 @@
 <html>
 <body style="padding: 0; margin: 0">
-<div style="left:0; top:0; width:1818px; height:1000px; background:url(grid.png);">
+<div id="left" style="position:absolute; left:0; top:0; width:50%; height:100%; background:white; overflow: scroll;">
   <canvas id="original" width="909" height="1000" style="position:absolute; left:0; top:0;"></canvas>
   <canvas id="mask" width="909" height="1000" style="position:absolute; left:0; top:0; opacity: 0.5"></canvas>
-  <canvas id="gl" width="909" height="1000" style="position:absolute; left:909; top:0"></canvas>
+</div>
+<div id="right" style="position:absolute; left:50%; top:0; width:50%; height:100%; background:url(grid.png); overflow: scroll;">
+  <canvas id="gl" width="909" height="1000" style="position:absolute; left:0; top:0"></canvas>
 </div>
 <script id="vs" type="x-shader/x-vertex">#version 300 es
   in vec4 aVertexPosition;
@@ -18,6 +20,7 @@
   uniform vec2 uScreen;
   uniform sampler2D uPicture;
   uniform sampler2D uInput;
+  uniform sampler2D uMask;
   uniform int uInputLength;
 
   out vec4 fragColor;
@@ -26,6 +29,7 @@
     int x = int(gl_FragCoord.x);
     int y = int(uScreen.y - .5 - gl_FragCoord.y);
     vec4 clr = texelFetch(uPicture, ivec2(x, y), 0);
+    vec4 msk = texelFetch(uMask, ivec2(x, y), 0);
     vec4 s_clr = clr * 255.0;
     vec4 s_pos = vec4(float(x), float(y), 0.0, 0.0);
     vec2 best[4];
@@ -45,6 +49,11 @@
     }
     if (best[0][1] + best[1][1] + best[2][1] < 0.0) {
       clr.a = 0.0;
+    }
+    if (msk.r > 0.5) {
+      clr.a = 0.0;
+    } else if (msk.g > 0.5) {
+      clr.a = 1.0;
     }
     fragColor = clr;
   }
@@ -98,29 +107,45 @@
     for (var y = 0; y < H; ++y) {
       for (var x = 0; x < W; ++x) {
         if (data[p] >= 128) {
-          top.push(srcPoints[c][0], srcPoints[c][1], srcPoints[c][2], 0);
-          bottom.push(x, y, -1, 0);
+          top.push([srcPoints[c][0], srcPoints[c][1], srcPoints[c][2], 0]);
+          bottom.push([x, y, -1, 0]);
         } else if (data[p + 1] >= 128) {
-          top.push(srcPoints[c][0], srcPoints[c][1], srcPoints[c][2], 0);
-          bottom.push(x, y, 1, 0);
+          top.push([srcPoints[c][0], srcPoints[c][1], srcPoints[c][2], 0]);
+          bottom.push([x, y, 1, 0]);
         }
         p += 4;
         c++;
       }
     }
-    return top.concat(bottom);
+    var n = top.length;
+    while (n > 0) {
+        var idx = Math.floor(Math.random() * n);
+        n--;
+        { var tmp = top[n]; top[n] = top[idx]; top[idx] = tmp; }
+        { var tmp = bottom[n]; bottom[n] = bottom[idx]; bottom[idx] = tmp; }
+    }
+    n = top.length;
+    if (n > 4096) n = 4096;
+    top = top.slice(0, n);
+    bottom = bottom.slice(0, n);
+
+    return [].concat.apply([], top.concat(bottom));
   }
 
   function doMouseDown(e) {
     var ctx = document.getElementById("mask").getContext("2d");
     ctx.beginPath();
-    ctx.arc(e.clientX, e.clientY, 5, 0, 2 * Math.PI);
+    ctx.arc(e.pageX + leftPane.scrollLeft, e.pageY + leftPane.scrollTop, 20, 0, 2 * Math.PI);
     if (e.shiftKey) {
       ctx.fillStyle = "rgb(255,0,0)";
       ctx.fill();
     } else if (e.altKey) {
+      var a = new Date().getTime();
       var input = makeGlInput();
+      var b = new Date().getTime();
+      console.log(b - a);
       loadInput(scene.input, input);
+      loadTexture(scene.mask, ctx.getImageData(0, 0, W, H));
       scene.inputLength = input.length >> 3;
       drawScene();
     } else {
@@ -188,9 +213,15 @@
     gl.bindTexture(gl.TEXTURE_2D, scene.input);
     gl.uniform1i(scene.uniformLocations.input, 1);
 
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, scene.mask);
+    gl.uniform1i(scene.uniformLocations.mask, 2);
+
     gl.uniform1i(scene.uniformLocations.inputLength, scene.inputLength);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    scene.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   }
 
   function makeTexture(gl) {
@@ -239,15 +270,43 @@
         screen: gl.getUniformLocation(shaderProgram, 'uScreen'),
         picture: gl.getUniformLocation(shaderProgram, 'uPicture'),
         input: gl.getUniformLocation(shaderProgram, 'uInput'),
+        mask: gl.getUniformLocation(shaderProgram, 'uMask'),
         inputLength: gl.getUniformLocation(shaderProgram, 'uInputLength'),
       },
       picture: makeTexture(),
       input: makeTexture(),
+      mask: makeTexture(),
       buffers: initBuffers(),
-      inputLength: 0
+      inputLength: 0,
+      sync: null
     };
+    setInterval(checkSync, 50);
     loadImage("https://media.baselineresearch.com/images/53642/53642_full.jpg", setOriginal);
   }
+
+  function checkSync() {
+    if (scene.sync == null) return;
+    var gl = getGl();
+    var signaled = gl.getSyncParameter(scene.sync, gl.SYNC_STATUS);
+    if (signaled == gl.SIGNALED) {
+      gl.deleteSync(scene.sync);
+      scene.sync = null;
+      console.log("done");
+    } else {
+      console.log("waiting");
+    }
+  }
+
+  var leftPane = document.getElementById("left");
+  var rightPane = document.getElementById("right");
+  leftPane.addEventListener("scroll", function(e) {
+    rightPane.scrollTop = leftPane.scrollTop;
+    rightPane.scrollLeft = leftPane.scrollLeft;
+  });
+  rightPane.addEventListener("scroll", function(e) {
+    leftPane.scrollTop = rightPane.scrollTop;
+    leftPane.scrollLeft = rightPane.scrollLeft;
+  });
 
   initGl();
   document.getElementById("mask").addEventListener("mousedown", doMouseDown);
