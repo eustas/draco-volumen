@@ -73,7 +73,7 @@
       reader.onloadend = function () { image.src = reader.result; };
       reader.readAsDataURL(xhr.response);
     };
-    var proxyUrl = 'https://crossorigin.me/';
+    var proxyUrl = 'https://test.cors.workers.dev/?';
     xhr.open('GET', proxyUrl + targetUrl);
     xhr.responseType = 'blob';
     xhr.send();
