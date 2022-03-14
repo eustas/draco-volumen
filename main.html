@@ -73,7 +73,7 @@
       reader.onloadend = function () { image.src = reader.result; };
       reader.readAsDataURL(xhr.response);
     };
-    var proxyUrl = 'http://alloworigin.com/get?url=';
+    var proxyUrl = 'https://crossorigin.me/';
     xhr.open('GET', proxyUrl + targetUrl);
     xhr.responseType = 'blob';
     xhr.send();
