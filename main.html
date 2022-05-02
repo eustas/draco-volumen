@@ -1,11 +1,26 @@
 <html>
-<body style="padding: 0; margin: 0">
+<head>
+<style type="text/css">
+.scale-1 .viewport {transform:scale(0.125);}
+.scale-2 .viewport {transform:scale(0.250);}
+.scale-3 .viewport {transform:scale(0.500);}
+.scale-4 .viewport {transform:scale(1.000);}
+.scale-5 .viewport {transform:scale(2.000);}
+.scale-6 .viewport {transform:scale(4.000);}
+.scale-7 .viewport {transform:scale(8.000);}
+</style>
+</head>
+<body class="scale-4" style="padding: 0; margin: 0">
 <div id="left" style="position:absolute; left:0; top:0; width:50%; height:100%; background:white; overflow: scroll;">
-  <canvas id="original" width="909" height="1000" style="position:absolute; left:0; top:0;"></canvas>
-  <canvas id="mask" width="909" height="1000" style="position:absolute; left:0; top:0; opacity: 0.5"></canvas>
+  <div class="viewport">
+    <canvas id="original" width="1280" height="854" style="position:absolute; left:0; top:0;"></canvas>
+    <canvas id="mask" width="1280" height="854" style="position:absolute; left:0; top:0; opacity: 0.5"></canvas>
+  </div>
 </div>
 <div id="right" style="position:absolute; left:50%; top:0; width:50%; height:100%; background:url(grid.png); overflow: scroll;">
-  <canvas id="gl" width="909" height="1000" style="position:absolute; left:0; top:0"></canvas>
+  <div class="viewport">
+    <canvas id="gl" width="1280" height="854" style="position:absolute; left:0; top:0"></canvas>
+  </div>
 </div>
 <script id="vs" type="x-shader/x-vertex">#version 300 es
   in vec4 aVertexPosition;
@@ -42,7 +57,7 @@
       vec4 m_pos = texelFetch(uInput, ivec2(i, 1), 0);
       float multiplier = m_pos[2];
       m_pos[2] = 0.0;
-      best[3] = vec2(length(vec2(distance(s_pos, m_pos), distance(s_clr, m_clr))), multiplier);
+      best[3] = vec2(length(vec2(0.5 * distance(s_pos, m_pos), distance(s_clr, m_clr))), multiplier);
       if (best[2][0] > best[3][0]) {best[2] = best[3];}
       if (best[1][0] > best[2][0]) {best[3] = best[1]; best[1] = best[2]; best[2] = best[3];}
       if (best[0][0] > best[1][0]) {best[3] = best[0]; best[0] = best[1]; best[1] = best[3];}
@@ -59,10 +74,11 @@
   }
 </script>
 <script type="text/javascript">
-  var W = 909;
-  var H = 1000;
+  var W = 1280;
+  var H = 854;
   var srcPoints = null;
   var scene = null;
+  var scale = 4;
 
   function loadImage(targetUrl, callback) {
     var xhr = new XMLHttpRequest();
@@ -73,7 +89,7 @@
       reader.onloadend = function () { image.src = reader.result; };
       reader.readAsDataURL(xhr.response);
     };
-    var proxyUrl = 'https://test.cors.workers.dev/?';
+    var proxyUrl = '';
     xhr.open('GET', proxyUrl + targetUrl);
     xhr.responseType = 'blob';
     xhr.send();
@@ -281,7 +297,7 @@
       sync: null
     };
     setInterval(checkSync, 50);
-    loadImage("https://media.baselineresearch.com/images/53642/53642_full.jpg", setOriginal);
+    loadImage("https://user-images.githubusercontent.com/203457/166234613-bf98208f-e164-4ef2-942d-4bf8bf80815a.jpeg", setOriginal);
   }
 
   function checkSync() {
@@ -308,8 +324,27 @@
     leftPane.scrollLeft = rightPane.scrollLeft;
   });
 
+  function setScale(factor) {
+    document.body.classList.remove("scale-" + scale);
+    scale = factor;
+    document.body.classList.add("scale-" + scale);
+  }
+
+  function doKeyDown(e) {
+    switch (e.key) {
+      case "1": setScale(1); break;
+      case "2": setScale(2); break;
+      case "3": setScale(3); break;
+      case "4": setScale(4); break;
+      case "5": setScale(5); break;
+      case "6": setScale(6); break;
+      case "7": setScale(7); break;
+    }
+  }
+
   initGl();
   document.getElementById("mask").addEventListener("mousedown", doMouseDown);
+  document.addEventListener("keydown", doKeyDown);
 </script>
 </body>
 </html>
